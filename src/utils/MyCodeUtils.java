@@ -119,7 +119,7 @@ public class MyCodeUtils {
 	}
 	
 	public static GeneralNames createIssuerAlternativeName(String[] issuerAltNames) {
-		if (issuerAltNames == null) {
+		if (issuerAltNames == null || issuerAltNames.length == 0) {
 			return null;
 		}
 		

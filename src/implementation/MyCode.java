@@ -48,9 +48,6 @@ import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
 import org.bouncycastle.cms.CMSTypedData;
 import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
-import org.bouncycastle.crypto.params.RSAKeyParameters;
-import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPrivateCrtKey;
-import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPublicKey;
 import org.bouncycastle.jcajce.provider.asymmetric.x509.CertificateFactory;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
@@ -66,17 +63,24 @@ import org.bouncycastle.util.encoders.Base64Encoder;
 import code.GuiException;
 import gui.Constants;
 import gui.GuiInterfaceV3;
+import java.security.PrivateKey;
+import org.bouncycastle.asn1.util.ASN1Dump;
+import org.bouncycastle.asn1.x509.KeyUsage;
+import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jcajce.provider.asymmetric.dsa.BCDSAPublicKey;
+import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPublicKey;
 import utils.MyCodeUtils;
 import x509.v3.CodeV3;
 
 public class MyCode extends CodeV3 {
 
-	private static final String KEYSTORE_TYPE = "bks";
+	private static final String KEYSTORE_TYPE = "jks";
 	private static final String KEYSTORE_PASSWORD = "password";
-	private static final String KEYSTORE_PATH = "keystore.bks";
+	private static final String KEYSTORE_PATH = "keystore." + KEYSTORE_TYPE;
 	private static final String ROOT_TRUSTED_CERT = "ETFrootCA";
 	private static KeyStore keyStore;
-	private static char[] keyStorePassword = KEYSTORE_PASSWORD.toCharArray();
+	private static final char[] keyStorePassword = KEYSTORE_PASSWORD.toCharArray();
 
 	
 	private SubjectPublicKeyInfo signingSpki = null;
@@ -101,15 +105,21 @@ public class MyCode extends CodeV3 {
 
 			//Getting basic constraints extension.
 			Extension bcExt = x509.getExtension(Extension.basicConstraints);
+                        Extension keyUsageExt = x509.getExtension(Extension.keyUsage);
 			BasicConstraints bc = null;
 			if (bcExt != null) {
 				bc = BasicConstraints.fromExtensions(new Extensions(bcExt));
 			}
-			else {
-				return false;
-			}
-
-			return bc == null ? false : bc.isCA();
+                        KeyUsage keyUsage = null;
+                        if (keyUsageExt != null) {
+                            
+                            keyUsage = KeyUsage.fromExtensions(new Extensions(keyUsageExt));
+                        }
+                        
+                        boolean bcCa = bc != null ? bc.isCA() : false;
+                        boolean kuCa = keyUsage != null ? keyUsage.hasUsages(5) : false;
+                        
+                        return bcCa || kuCa;
 
 		}
 		catch (Exception e) {
@@ -179,9 +189,9 @@ public class MyCode extends CodeV3 {
 			ContentSigner signer = null;
 
 			//Getting private key.
-			java.security.Key privateKey = keyStore.getKey(keypairName, keyStorePassword);
+			java.security.PrivateKey privateKey = (PrivateKey)keyStore.getKey(keypairName, keyStorePassword);
 
-			signer = new JcaContentSignerBuilder(algorithm).build((BCRSAPrivateCrtKey)privateKey);
+			signer = new JcaContentSignerBuilder(algorithm).build(privateKey);
 
 			PKCS10CertificationRequest csr = csrBuilder.build(signer);
 
@@ -327,6 +337,8 @@ public class MyCode extends CodeV3 {
 				if (keyStore.isKeyEntry(keypairName)) {
 					privateKey = keyStore.getKey(keypairName, keyStorePassword);
 				}
+                                cert = new java.security.cert.Certificate[1];
+                                cert[0] = keyStore.getCertificateChain(keypairName)[0];
 				ks.setKeyEntry(keypairName, privateKey, password.toCharArray(), cert);
 			}
 			else {
@@ -390,12 +402,21 @@ public class MyCode extends CodeV3 {
 			CertificateFactory factory = new CertificateFactory();
 			X509Certificate javaCert = (X509Certificate) factory.engineGenerateCertificate(new ByteArrayInputStream(cert.getEncoded()));
 
+                        int bitLen = 0;
+                        
 			//Getting public key.
 			PublicKey pk = javaCert.getPublicKey();
-			BCRSAPublicKey bcPk = (BCRSAPublicKey)pk;
-
-			//Getting public key parameter.
-			int bitLen = bcPk.getModulus().bitLength();
+                        if (pk instanceof BCRSAPublicKey) {
+                            BCRSAPublicKey bcPk = (BCRSAPublicKey)pk;
+                            //Getting public key parameter.
+                            bitLen = bcPk.getModulus().bitLength();
+                        }
+                        else if (pk instanceof BCDSAPublicKey){
+                            BCDSAPublicKey bcPk = (BCDSAPublicKey)pk;
+                            bcPk.getY().bitLength();
+                            //Getting public key parameter.
+                            bitLen = bcPk.getY().bitLength() + 1;
+                        }
 
 			return bitLen + "";
 		}
@@ -679,6 +700,8 @@ public class MyCode extends CodeV3 {
 			X509Certificate javaCert = (X509Certificate) factory.engineGenerateCertificate(new ByteArrayInputStream(cert.getEncoded()));
 			X509CertificateHolder x509 = new X509CertificateHolder(cert.getEncoded());
 
+                        
+                        System.out.println(ASN1Dump.dumpAsString(javaCert));
 			int version = x509.getVersionNumber();
 
 			//Getting certificate 
@@ -722,15 +745,15 @@ public class MyCode extends CodeV3 {
 			}
 
 			//Getting public key algorithm name and parameter.
-			SubjectPublicKeyInfo spki = x509.getSubjectPublicKeyInfo();
-			AlgorithmIdentifier spkiId = spki.getAlgorithm();
-			String publicKeyAlgorithmName = algNameFinder.getAlgorithmName(spkiId.getAlgorithm());
-			String publicKeyParameter = null;
+			//SubjectPublicKeyInfo spki = x509.getSubjectPublicKeyInfo();
+//			AlgorithmIdentifier spkiId = spki.getAlgorithm();
+//			String publicKeyAlgorithmName = algNameFinder.getAlgorithmName(spkiId.getAlgorithm());
 
-			PublicKey pk = javaCert.getPublicKey();
-			BCRSAPublicKey bcPk = (BCRSAPublicKey)pk;
-			publicKeyParameter = "" + bcPk.getModulus().bitLength();
-
+                        String publicKeyAlgorithmName = this.getCertPublicKeyAlgorithm(keypairName);
+                        
+                        String publicKeyParameter = null;
+			publicKeyParameter = this.getCertPublicKeyParameter(keypairName);
+			
 			//Setting parsed data.
 			access.setSubject(subject.toString());
 			access.setIssuer(issuer.toString());
@@ -803,11 +826,11 @@ public class MyCode extends CodeV3 {
 		FileInputStream input = null;
 		FileOutputStream output = null;
 
-		if (Security.getProvider(KEYSTORE_TYPE) == null) {
-			Security.insertProviderAt(new BouncyCastleProvider(), 1);
-		}
+		//if (Security.getProvider(KEYSTORE_TYPE) == null) {
+		//	Security.insertProviderAt(new BouncyCastleProvider(), 1);
+		//}
 		try {
-			ks = KeyStore.getInstance(KEYSTORE_TYPE, BouncyCastleProvider.PROVIDER_NAME);
+			ks = KeyStore.getInstance(KEYSTORE_TYPE);
 
 			//Checking if local keystore was already created.
 			File f = new File(KEYSTORE_PATH);
@@ -933,10 +956,10 @@ public class MyCode extends CodeV3 {
 			return false;
 		}
 
-		BCRSAPrivateCrtKey privateKey = (BCRSAPrivateCrtKey)kp.getPrivate();
+		//BCRSAPrivateCrtKey privateKey = (BCRSAPrivateCrtKey)kp.getPrivate();
 		
-		BCRSAPublicKey publicK = (BCRSAPublicKey)kp.getPublic();
-		RSAKeyParameters publicKey = new RSAKeyParameters(false, publicK.getModulus(),publicK.getPublicExponent());
+		//BCRSAPublicKey publicK = (BCRSAPublicKey)kp.getPublic();
+		//RSAKeyParameters publicKey = new RSAKeyParameters(false, publicK.getModulus(),publicK.getPublicExponent());
 		
 		//Parsing path length.
 		boolean hasPath = false;
@@ -951,13 +974,13 @@ public class MyCode extends CodeV3 {
 		//Creating builder for generating certificate
 
 		X509v3CertificateBuilder builder = null;
-		try {
+//		try {
 
-			builder = new BcX509v3CertificateBuilder(new X500Name(subject), serial, notBefore, notAfter, new X500Name(subject), publicKey);
-		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
+			builder = new JcaX509v3CertificateBuilder(new X500Name(subject), serial, notBefore, notAfter, new X500Name(subject), kp.getPublic());
+//		} catch (IOException e1) {
+//			// TODO Auto-generated catch block
+//			e1.printStackTrace();
+//		}
 		
 		BasicConstraints bc = null;
 		if (ca && hasPath) {
@@ -982,7 +1005,7 @@ public class MyCode extends CodeV3 {
 			if (skiEnabled) {
 
 				//builder.addExtension(Extension.subjectKeyIdentifier, false, SubjectKeyIdentifier.getInstance(new DEROctetString(kp.getPublic().getEncoded())));
-				builder.addExtension(Extension.subjectKeyIdentifier, skiCritical, new BcX509ExtensionUtils().createSubjectKeyIdentifier(publicKey));
+				builder.addExtension(Extension.subjectKeyIdentifier, skiCritical, new JcaX509ExtensionUtils().createSubjectKeyIdentifier(kp.getPublic()));
 				//builder.addExtension(Extension.subjectKeyIdentifier, skiCritical, new BcX509ExtensionUtils().createSubjectKeyIdentifier(rsaKP.getPublic()));
 			}
 		} catch (Exception e) {
@@ -995,7 +1018,7 @@ public class MyCode extends CodeV3 {
 			//AlgorithmIdentifier signatureId = new DefaultSignatureAlgorithmIdentifierFinder().find(digestAlgorithm);
 			//AlgorithmIdentifier digestId = new DefaultDigestAlgorithmIdentifierFinder().find(signatureId);
 
-			signatureGenerator = new JcaContentSignerBuilder(digestAlgorithm).build(privateKey);
+			signatureGenerator = new JcaContentSignerBuilder(digestAlgorithm).build(kp.getPrivate());
 			//signatureGenerator = new BcRSAContentSignerBuilder(signatureId, digestId).build(privateKey);
 
 			//Generating certificate
@@ -1011,7 +1034,7 @@ public class MyCode extends CodeV3 {
 			certArray[0] = x509;
 
 			//Storing certificate in local key store
-			keyStore.setKeyEntry(keypairName, privateKey, keyStorePassword, certArray);			
+			keyStore.setKeyEntry(keypairName, kp.getPrivate(), keyStorePassword, certArray);			
 			MyCodeUtils.storeKeystore(keyStore, KEYSTORE_PATH, keyStorePassword);
 
 		} catch (Exception e) {
@@ -1035,7 +1058,7 @@ public class MyCode extends CodeV3 {
 			}
 			
 			X509CertificateHolder issuerCert = new X509CertificateHolder(signerChain[0].getEncoded());
-			Key privateKey = keyStore.getKey(keypairName, keyStorePassword);
+			PrivateKey privateKey = (PrivateKey)keyStore.getKey(keypairName, keyStorePassword);
 		
 			if (privateKey == null) {
 				GuiInterfaceV3.reportError("Private key not found.");
@@ -1054,7 +1077,7 @@ public class MyCode extends CodeV3 {
 			
 			//Adding cert to new store which will be used for generating signature
 			Store certStore = new JcaCertStore(certs);
-			ContentSigner signer = new JcaContentSignerBuilder(algorithm).build((BCRSAPrivateCrtKey)privateKey);
+			ContentSigner signer = new JcaContentSignerBuilder(algorithm).build(privateKey);
 
 
 			String subject = access.getSubject();
