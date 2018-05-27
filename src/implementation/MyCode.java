@@ -75,9 +75,9 @@ import x509.v3.CodeV3;
 
 public class MyCode extends CodeV3 {
 
-	private static final String KEYSTORE_TYPE = "jks";
+	private static final String KEYSTORE_TYPE = "bks";
 	private static final String KEYSTORE_PASSWORD = "password";
-	private static final String KEYSTORE_PATH = "keystore." + KEYSTORE_TYPE;
+	private static final String KEYSTORE_PATH = "keystore.bks";
 	private static final String ROOT_TRUSTED_CERT = "ETFrootCA";
 	private static KeyStore keyStore;
 	private static final char[] keyStorePassword = KEYSTORE_PASSWORD.toCharArray();
@@ -337,8 +337,8 @@ public class MyCode extends CodeV3 {
 				if (keyStore.isKeyEntry(keypairName)) {
 					privateKey = keyStore.getKey(keypairName, keyStorePassword);
 				}
-                                cert = new java.security.cert.Certificate[1];
-                                cert[0] = keyStore.getCertificateChain(keypairName)[0];
+                                //cert = new java.security.cert.Certificate[1];
+                               // cert[0] = keyStore.getCertificateChain(keypairName)[0];
 				ks.setKeyEntry(keypairName, privateKey, password.toCharArray(), cert);
 			}
 			else {
@@ -353,6 +353,7 @@ public class MyCode extends CodeV3 {
 
 			return true;
 		} catch (Exception e) {
+                        e.printStackTrace();
 			GuiInterfaceV3.reportError(e);
 			return false;
 		}
@@ -826,9 +827,9 @@ public class MyCode extends CodeV3 {
 		FileInputStream input = null;
 		FileOutputStream output = null;
 
-		//if (Security.getProvider(KEYSTORE_TYPE) == null) {
-		//	Security.insertProviderAt(new BouncyCastleProvider(), 1);
-		//}
+		if (Security.getProvider(KEYSTORE_TYPE) == null) {
+			Security.insertProviderAt(new BouncyCastleProvider(), 1);
+		}
 		try {
 			ks = KeyStore.getInstance(KEYSTORE_TYPE);
 
