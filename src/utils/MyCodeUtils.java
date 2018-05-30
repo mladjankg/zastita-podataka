@@ -1,8 +1,10 @@
 package utils;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -21,6 +23,7 @@ import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.util.encoders.Base64Encoder;
 
 import x509.v3.GuiV3;
 
@@ -187,17 +190,22 @@ public class MyCodeUtils {
 				output.close();
 			}
 	}
-
-	public static boolean isTrusted(KeyStore ks, String clientCertAlias, String baseCertAlias) {
-		try {
-			
-			//Checking if clientCert is baseCert.
-			if (clientCertAlias.equals(baseCertAlias)) {
-				return true;
-			}
-			
-			else 
-				return false;
+        
+        public static void writePem(OutputStreamWriter writer, String begin, String end, byte[] encoded) throws IOException {
+            writer.write(begin.toCharArray(), 0, begin.length());
+            byte[] bytes = null;
+            try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                Base64Encoder b64 = new Base64Encoder();
+                b64.encode(encoded, 0, encoded.length, out);	
+                bytes = out.toByteArray();
+            }
+            String pem = new String(bytes);
+            writer.write(pem);
+            writer.write(end);
+        }
+        
+	//public static boolean isTrusted(KeyStore ks, String certAlias) {
+                    
 //			java.security.cert.Certificate baseJavaCert = ks.getCertificate(baseCertAlias);
 //			java.security.cert.Certificate clientJavaCert = ks.getCertificate(clientCertAlias);
 //			
@@ -247,10 +255,10 @@ public class MyCodeUtils {
 //				return isTrusted(ks, issuerAlias, baseCertAlias);
 //			}
 //			
-		}
-		catch (Exception e) {
-			e.printStackTrace();
-		}
-		return false;
-	}
+//		}
+//		catch (Exception e) {
+//			e.printStackTrace();
+//		}
+//		return false;
+//	}
 }
