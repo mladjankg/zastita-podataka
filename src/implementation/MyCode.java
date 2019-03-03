@@ -79,7 +79,6 @@ import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.jcajce.provider.asymmetric.dsa.BCDSAPublicKey;
 import org.bouncycastle.jcajce.provider.asymmetric.rsa.BCRSAPublicKey;
 import org.bouncycastle.operator.OperatorCreationException;
-import utils.MyCodeUtils;
 import x509.v3.CodeV3;
 
 public class MyCode extends CodeV3 {
@@ -127,11 +126,15 @@ public class MyCode extends CodeV3 {
 
                 keyUsage = KeyUsage.fromExtensions(new Extensions(keyUsageExt));
             }
-
+            
+            boolean hasPK = false;
+            if (keyStore.isKeyEntry(keypairName)) {
+                hasPK = true;
+            }
             boolean bcCa = bc != null ? bc.isCA() : false;
             boolean kuCa = keyUsage != null ? keyUsage.hasUsages(5) : false;
 
-            return bcCa || kuCa;
+            return (bcCa || kuCa) && hasPK;
 
         } catch (Exception e) {
             GuiInterfaceV3.reportError(e);
@@ -945,6 +948,7 @@ public class MyCode extends CodeV3 {
         }
         
         int version = access.getVersion();
+        ++version;
         if (version != 3) {
             GuiInterfaceV3.reportError("Certificate version not supported.");
             return false;
